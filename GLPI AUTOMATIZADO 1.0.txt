@@ -65,3 +65,5 @@ systemctl enable apache2
 systemctl restart apache2
 
 echo "Instalação do GLPI versão $GLPI_VERSION concluída!"
+echo "Primeiro Acesso: Usuário: glpi | Senha: glpi"
+echo "Instalação do GLPI versão $GLPI_VERSION concluída!"
