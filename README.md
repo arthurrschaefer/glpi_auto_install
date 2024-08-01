@@ -43,6 +43,6 @@ Licença
 Este projeto é distribuído sob a licença MIT. Para mais detalhes, consulte o arquivo LICENSE.
 
 Contato
-Para dúvidas ou sugestões, entre em contato com Flávio Silva através do e-mail: flavio@example.com (substitua pelo seu e-mail real).
+Para dúvidas ou sugestões, entre em contato com Flávio Silva através do e-mail: pentestsystem@gmail.com.
 
 Este projeto foi desenvolvido com o suporte do ChatGPT.
