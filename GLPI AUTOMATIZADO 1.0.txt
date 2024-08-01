@@ -1,0 +1,67 @@
+#!/bin/bash
+#Autor: Flávio Silva | OPROFESSOR
+#DATA CRIAÇÃO: 29/07/2024
+
+# Função para buscar a última versão do GLPI do GitHub
+get_latest_glpi_version() {
+  curl --silent "https://api.github.com/repos/glpi-project/glpi/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")'
+}
+
+# Armazena a última versão do GLPI
+GLPI_VERSION=$(get_latest_glpi_version)
+
+# Adiciona repositórios necessários
+add-apt-repository ppa:ondrej/php -y
+add-apt-repository ppa:ondrej/apache2 -y
+
+# Atualiza a lista de pacotes e atualiza pacotes existentes
+apt update -y
+apt upgrade -y
+
+# Instala o Apache2, PHP e as extensões necessárias
+apt install -y apache2 libapache2-mod-php php-soap php-cas php php-{apcu,cli,common,curl,gd,imap,ldap,mysql,xmlrpc,xml,mbstring,bcmath,intl,zip,bz2}
+
+# Baixa e descompacta a última versão do GLPI na pasta /var/www/html/
+wget -O- https://github.com/glpi-project/glpi/releases/download/$GLPI_VERSION/glpi-$GLPI_VERSION.tgz | tar -xzv -C /var/www/html/
+
+# Ajusta permissões
+chown www-data:www-data /var/www/html/glpi -Rf
+find /var/www/html/glpi -type d -exec chmod 775 {} \;
+find /var/www/html/glpi -type f -exec chmod 644 {} \;
+
+# Instala o MariaDB
+apt install -y mariadb-server
+
+# Pergunta ao usuário sobre as configurações do banco de dados
+read -p "Deseja usar as configurações padrão do banco de dados? (s/n) " use_default
+
+if [ "$use_default" == "s" ]; then
+  DB_NAME="glpidb"
+  DB_USER="glpi"
+  DB_PASSWORD="glpi123"
+else
+  read -p "Digite o nome do banco de dados: " DB_NAME
+  read -p "Digite o nome do usuário do banco de dados: " DB_USER
+  read -sp "Digite a senha do usuário do banco de dados: " DB_PASSWORD
+  echo
+fi
+
+# Cria banco de dados e usuário para o GLPI
+mysql -e "create database ${DB_NAME} character set utf8"
+mysql -e "create user '${DB_USER}'@'localhost' identified by '${DB_PASSWORD}'"
+mysql -e "grant all privileges on ${DB_NAME}.* to '${DB_USER}'@'localhost' with grant option"
+mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -p -u root mysql
+mysql -e "GRANT SELECT ON mysql.time_zone_name TO '${DB_USER}'@'localhost'"
+mysql -e "FLUSH PRIVILEGES"
+
+# Instala o GLPI via CLI
+php /var/www/html/glpi/bin/console glpi:database:install --db-host=localhost --db-name=${DB_NAME} --db-user=${DB_USER} --db-password=${DB_PASSWORD}
+
+# Ajusta permissões novamente
+chown www-data:www-data /var/www/html/glpi/files -Rf
+
+# Habilita e reinicia o Apache2
+systemctl enable apache2
+systemctl restart apache2
+
+echo "Instalação do GLPI versão $GLPI_VERSION concluída!"
