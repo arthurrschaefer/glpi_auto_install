@@ -62,7 +62,6 @@ mysql -e "FLUSH PRIVILEGES"
 
 if [ "$use_teclib" == "s" ]; then
   # Configurações recomendadas pela Teclib'
-  mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql mysql
 
   # Cria e configura o arquivo downstream.php
   cat <<EOF > /var/www/html/glpi/inc/downstream.php
@@ -76,7 +75,7 @@ EOF
   # Move pastas para locais mais seguros
   mv /var/www/html/glpi/config /etc/glpi
   mv /var/www/html/glpi/files /var/lib/glpi
-  mv /var/lib/glpi/_log /var/log/glpi
+  mv /var/www/html/glpi/files/_log /var/log/glpi
 
   # Cria e configura o arquivo local_define.php
   cat <<EOF > /etc/glpi/local_define.php
