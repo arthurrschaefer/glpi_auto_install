@@ -7,6 +7,12 @@ get_latest_glpi_version() {
   curl --silent "https://api.github.com/repos/glpi-project/glpi/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")'
 }
 
+# Prompt inicial
+read -p "Você gostaria de seguir a instalação nos moldes recomendados pela Teclib'? (s/n) " use_teclib
+
+# Pergunta a URL desejada para o GLPI
+read -p "Digite a URL desejada para acessar o GLPI (ex: glpi.seudominio.com): " glpi_url
+
 # Armazena a última versão do GLPI
 GLPI_VERSION=$(get_latest_glpi_version)
 
@@ -53,6 +59,78 @@ mysql -e "grant all privileges on ${DB_NAME}.* to '${DB_USER}'@'localhost' with 
 mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -p -u root mysql
 mysql -e "GRANT SELECT ON mysql.time_zone_name TO '${DB_USER}'@'localhost'"
 mysql -e "FLUSH PRIVILEGES"
+
+if [ "$use_teclib" == "s" ]; then
+  # Configurações recomendadas pela Teclib'
+  mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql mysql
+
+  # Cria e configura o arquivo downstream.php
+  cat <<EOF > /var/www/html/glpi/inc/downstream.php
+<?php
+define('GLPI_CONFIG_DIR', '/etc/glpi/');
+if (file_exists(GLPI_CONFIG_DIR . '/local_define.php')) {
+    require_once GLPI_CONFIG_DIR . '/local_define.php';
+}
+EOF
+
+  # Move pastas para locais mais seguros
+  mv /var/www/html/glpi/config /etc/glpi
+  mv /var/www/html/glpi/files /var/lib/glpi
+  mv /var/lib/glpi/_log /var/log/glpi
+
+  # Cria e configura o arquivo local_define.php
+  cat <<EOF > /etc/glpi/local_define.php
+<?php
+define('GLPI_VAR_DIR', '/var/lib/glpi');
+define('GLPI_DOC_DIR', GLPI_VAR_DIR);
+define('GLPI_CRON_DIR', GLPI_VAR_DIR . '/_cron');
+define('GLPI_DUMP_DIR', GLPI_VAR_DIR . '/_dumps');
+define('GLPI_GRAPH_DIR', GLPI_VAR_DIR . '/_graphs');
+define('GLPI_LOCK_DIR', GLPI_VAR_DIR . '/_lock');
+define('GLPI_PICTURE_DIR', GLPI_VAR_DIR . '/_pictures');
+define('GLPI_PLUGIN_DOC_DIR', GLPI_VAR_DIR . '/_plugins');
+define('GLPI_RSS_DIR', GLPI_VAR_DIR . '/_rss');
+define('GLPI_SESSION_DIR', GLPI_VAR_DIR . '/_sessions');
+define('GLPI_TMP_DIR', GLPI_VAR_DIR . '/_tmp');
+define('GLPI_UPLOAD_DIR', GLPI_VAR_DIR . '/_uploads');
+define('GLPI_CACHE_DIR', GLPI_VAR_DIR . '/_cache');
+define('GLPI_LOG_DIR', '/var/log/glpi');
+EOF
+
+  # Ajusta permissões
+  chown root:root /var/www/html/glpi/ -R
+  chown www-data:www-data /etc/glpi -R
+  chown www-data:www-data /var/lib/glpi -R
+  chown www-data:www-data /var/log/glpi -R
+  chown www-data:www-data /var/www/html/glpi/marketplace -Rf
+  find /var/www/html/glpi/ -type f -exec chmod 0644 {} \;
+  find /var/www/html/glpi/ -type d -exec chmod 0755 {} \;
+  find /etc/glpi -type f -exec chmod 0644 {} \;
+  find /etc/glpi -type d -exec chmod 0755 {} \;
+  find /var/lib/glpi -type f -exec chmod 0644 {} \;
+  find /var/lib/glpi -type d -exec chmod 0755 {} \;
+  find /var/log/glpi -type f -exec chmod 0644 {} \;
+  find /var/log/glpi -type d -exec chmod 0755 {} \;
+
+  # Configura o Apache
+  cat <<EOF > /etc/apache2/sites-available/glpi.conf
+<VirtualHost *:80>
+    ServerName $glpi_url
+    DocumentRoot /var/www/html/glpi/public
+    <Directory /var/www/html/glpi/public>
+        Require all granted
+        RewriteEngine On
+        RewriteCond %{HTTP:Authorization} ^(.+)$
+        RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteRule ^(.*)$ index.php [QSA,L]
+    </Directory>
+</VirtualHost>
+EOF
+
+  a2ensite glpi
+  systemctl reload apache2
+fi
 
 # Instala o GLPI via CLI
 php /var/www/html/glpi/bin/console glpi:database:install --db-host=localhost --db-name=${DB_NAME} --db-user=${DB_USER} --db-password=${DB_PASSWORD}
